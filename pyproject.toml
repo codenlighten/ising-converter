@@ -1,0 +1,22 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "ising_lab"
+version = "0.1.0"
+description = "Python lab for converting combinatorial problems into Ising/QUBO form, with a Rust simulated-annealing kernel."
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "maturin>=1.5", "dimod>=0.12"]
+dimod = ["dimod>=0.12"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "ising_lab._kernel"
+features = ["pyo3/extension-module"]

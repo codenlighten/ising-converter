@@ -1,0 +1,17 @@
+[package]
+name = "ising_lab"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "_kernel"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+rand = { version = "0.8", features = ["small_rng"] }
+rayon = "1.10"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
