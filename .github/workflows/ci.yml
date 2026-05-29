@@ -40,9 +40,12 @@ jobs:
         run: cargo clippy --release -- -D warnings
 
       - name: Build kernel and install with dev extras
+        # Editable install via the maturin PEP 517 backend; builds the Rust
+        # kernel and pulls in the dev extras (pytest, dimod). Unlike
+        # `maturin develop`, this does not require an active virtualenv.
         run: |
-          python -m pip install --upgrade pip maturin
-          maturin develop --release --extras dev
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
 
       - name: Run tests
         run: pytest -q
