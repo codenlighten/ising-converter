@@ -140,3 +140,7 @@ results/                   benchmark outputs (CSV/JSON)
 - A. Lucas, *Ising formulations of many NP problems*, Front. Phys. 2 (2014).
 - Katzgraber, Trebst, Huse, Troyer, *Feedback-optimized parallel tempering Monte
   Carlo*, Phys. Rev. E 73, 056704 (2006).
+
+## License
+
+MIT — see [LICENSE](LICENSE).

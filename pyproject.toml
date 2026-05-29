@@ -7,7 +7,9 @@ name = "ising_lab"
 version = "0.1.0"
 description = "Python lab for converting combinatorial problems into Ising/QUBO form, with a Rust simulated-annealing kernel."
 requires-python = ">=3.9"
+license = { file = "LICENSE" }
 classifiers = [
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
 ]
