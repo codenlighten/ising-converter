@@ -1,6 +1,7 @@
 # Rust
 /target/
-Cargo.lock
+# Cargo.lock is tracked: this crate builds a cdylib (application), so a
+# committed lockfile gives reproducible builds.
 
 # Python
 __pycache__/
