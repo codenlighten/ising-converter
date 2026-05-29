@@ -1,5 +1,7 @@
 # ising_lab
 
+[![CI](https://github.com/codenlighten/ising-converter/actions/workflows/ci.yml/badge.svg)](https://github.com/codenlighten/ising-converter/actions/workflows/ci.yml)
+
 A Python lab for converting combinatorial problems into **Ising / QUBO** form and
 solving them with a fast **Rust** kernel (simulated annealing and parallel
 tempering), backed by a benchmark harness, a best-known-optimum registry, and
