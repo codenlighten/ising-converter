@@ -1,0 +1,44 @@
+{
+  "experiment": "tts_scaling_ea3d",
+  "regime": "3d-gaussian EA",
+  "metric": "optimal work-to-solution (Monte Carlo sweep units), median over instances",
+  "methodology": "Ronnow-style optimal TTS; budget scanned, minimum taken",
+  "instances_per_size": 5,
+  "reads": 60,
+  "rows": [
+    {
+      "L": 3,
+      "n": 27,
+      "pa_optimal_tts": 1200,
+      "pt_optimal_tts": 16000,
+      "pt_unreached_fraction": 0.0,
+      "ratio_pt_over_pa": 13.333333333333334
+    },
+    {
+      "L": 4,
+      "n": 64,
+      "pa_optimal_tts": 3249.5639641384582,
+      "pt_optimal_tts": 55746.09224105648,
+      "pt_unreached_fraction": 0.0,
+      "ratio_pt_over_pa": 17.154945357672375
+    },
+    {
+      "L": 5,
+      "n": 125,
+      "pa_optimal_tts": 8763.88458803311,
+      "pt_optimal_tts": 11189424.807312813,
+      "pt_unreached_fraction": 0.0,
+      "ratio_pt_over_pa": 1276.765422332435
+    },
+    {
+      "L": 6,
+      "n": 216,
+      "pa_optimal_tts": 80482.68573271237,
+      "pt_optimal_tts": null,
+      "pt_unreached_fraction": 1.0,
+      "ratio_pt_over_pa": null
+    }
+  ],
+  "pa_log_tts_slope_per_spin": 0.021720608770119866,
+  "note": "PT work-to-solution diverges relative to PA as N grows; PA stays tractable."
+}

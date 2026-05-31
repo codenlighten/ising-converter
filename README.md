@@ -227,6 +227,35 @@ Parisi constant −0.7632). All samplers tie at −0.7453 — a +0.018 gap that 
 expected O(N^{−2/3}) finite-size correction, not sampler error. On mean-field SK
 the landscape is easy enough that method choice barely matters.
 
+### Time-to-solution scaling (PA vs PT)
+
+The rigorous version of "PA beats PT": optimal **work-to-solution** in
+hardware-independent Monte Carlo sweep units (Rønnow-style — budget scanned, the
+minimum taken), on 3D EA Gaussian, median over 5 instances per size
+(`scripts/bench_tts_scaling.py`, `results/tts_scaling_ea3d.json`):
+
+| L | N   | PA W\*    | PT W\*       | PT / PA |
+|---|-----|----------:|-------------:|--------:|
+| 3 | 27  | 1,200     | 16,000       | 13×     |
+| 4 | 64  | 3,250     | 55,746       | 17×     |
+| 5 | 125 | 8,764     | 11,189,425   | **1,277×** |
+| 6 | 216 | 80,483    | *unreached*  | ∞       |
+
+PA's work-to-solution grows gracefully with N; PT's diverges — a roughly
+constant ~15× edge at small sizes blows up to >1000× by N=125, and by N=216 PT
+fails to reach the best-known energy within the tested budget (≤256k sweep
+units) while PA solves it. Sweep units remove the multicore-parallelism
+confound, so this is an *algorithmic* separation, not a hardware artifact.
+
+Honest caveats: (i) the scan optimizes over per-attempt *sweeps* at fixed
+PA population/replica counts, so both W\* values are upper bounds on each
+method's globally-optimal TTS; the robust conclusion is the *separation*, not
+the absolute numbers. (ii) "Unreached" means PT did not reach the
+**heavy-PA-derived** best-known energy (validated to equal brute force only at
+N≤27), not that PT cannot find the true ground state. (iii) PT's large-N W\*
+rests on few successes per 60 reads, so it is noisy to a factor of ~2 — far
+smaller than the gap.
+
 ## Development
 
 ```bash
