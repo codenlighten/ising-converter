@@ -1,0 +1,93 @@
+{
+  "sk_bruteforce": {
+    "SA": {
+      "N16": {
+        "success_prob": 0.96,
+        "median_tts_99": 0.00011120556737296284,
+        "wall_time": 0.0032432258245535194
+      },
+      "N24": {
+        "success_prob": 0.96,
+        "median_tts_99": 0.0002595519336561362,
+        "wall_time": 0.00706100381212309
+      }
+    },
+    "PT": {
+      "N16": {
+        "success_prob": 1.0,
+        "median_tts_99": 0.0017850229322599867,
+        "wall_time": 0.05346795599907637
+      },
+      "N24": {
+        "success_prob": 1.0,
+        "median_tts_99": 0.003264977067010477,
+        "wall_time": 0.09994551338022575
+      }
+    },
+    "Houdayer-PT": {
+      "N16": {
+        "success_prob": 1.0,
+        "median_tts_99": 0.004103666099642093,
+        "wall_time": 0.12357434140285477
+      },
+      "N24": {
+        "success_prob": 1.0,
+        "median_tts_99": 0.007353418766676138,
+        "wall_time": 0.22116466800216586
+      }
+    },
+    "PA": {
+      "N16": {
+        "success_prob": 1.0,
+        "median_tts_99": 0.000697772732625405,
+        "wall_time": 0.020961010409519077
+      },
+      "N24": {
+        "success_prob": 1.0,
+        "median_tts_99": 0.001249553234083578,
+        "wall_time": 0.037674375611823054
+      }
+    }
+  },
+  "ea_gaussian_L6": {
+    "SA": {
+      "mean_best": -363.33715144807064,
+      "mean_mean": -359.0272742970516,
+      "mean_wall_time": 0.03717766179470346
+    },
+    "PT": {
+      "mean_best": -356.06149586244885,
+      "mean_mean": -352.94638289216704,
+      "mean_wall_time": 0.534164006006904
+    },
+    "Houdayer-PT": {
+      "mean_best": -357.5063014009534,
+      "mean_mean": -354.4425217320538,
+      "mean_wall_time": 1.3231453151674941
+    },
+    "PA": {
+      "mean_best": -363.5709265097132,
+      "mean_mean": -363.0585492452656,
+      "mean_wall_time": 0.17148521419148893
+    },
+    "BP (baseline)": {
+      "mean_best": 16.925690484462393,
+      "mean_mean": NaN,
+      "mean_wall_time": 0.00040797401452437044
+    }
+  },
+  "sk_parisi_N200": {
+    "SA": {
+      "mean_energy_density": -0.7452905473706211,
+      "gap_to_parisi": 0.017876152629378916
+    },
+    "PT": {
+      "mean_energy_density": -0.7452905473706211,
+      "gap_to_parisi": 0.017876152629378916
+    },
+    "PA": {
+      "mean_energy_density": -0.7452905473706211,
+      "gap_to_parisi": 0.017876152629378916
+    }
+  }
+}

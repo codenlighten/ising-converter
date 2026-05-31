@@ -188,6 +188,45 @@ r = il.parallel_tempering(sk.model, num_sweeps=8000, num_replicas=24, num_reads=
 print(sk_energy_density(min(e for _, e in r), 400))   # -> approaches -0.7632
 ```
 
+## Results: method comparison
+
+A unified benchmark across every method (`scripts/bench_all_methods.py`,
+artifact in `results/all_methods_comparison.json`). The honest summary: the best
+method depends on the regime, and the gaps grow with problem hardness.
+
+**Sherrington–Kirkpatrick, exact truth** (success probability / median TTS₉₉).
+All replica methods solve these; population annealing has the best
+time-to-solution.
+
+| method        | N=16 success | N=16 TTS₉₉ | N=24 success | N=24 TTS₉₉ |
+|---------------|:------------:|:----------:|:------------:|:----------:|
+| SA            | 96 %         | 0.0001 s   | 96 %         | 0.0003 s   |
+| PT            | 100 %        | 0.0018 s   | 100 %        | 0.0033 s   |
+| Houdayer-PT   | 100 %        | 0.0041 s   | 100 %        | 0.0074 s   |
+| **PA**        | **100 %**    | **0.0007 s** | **100 %**  | **0.0012 s** |
+
+**3D Edwards–Anderson, Gaussian, L=6 (N=216)** — the sparse-lattice regime of
+hardware annealers (mean best / mean typical energy / wall time, 5 instances):
+
+| method        | mean best | mean typical | wall   |
+|---------------|:---------:|:------------:|:------:|
+| SA            | −363.3    | −359.0       | 0.04 s |
+| PT            | −356.1    | −352.9       | 0.53 s |
+| Houdayer-PT   | −357.5    | −354.4       | 1.32 s |
+| **PA**        | **−363.6**| **−363.1**   | 0.17 s |
+| BP (baseline) | +16.9     | —            | 0.00 s |
+
+PA wins on both best and (especially) typical-run energy; the margin over PT
+widens at larger L (at L=8 it reaches energies ~28 units lower than PT given 16×
+the sweeps — see `results/population_vs_pt_ea3d.json`). SA is competitive on
+best-of at this smaller size; belief propagation, rounded to a configuration, is
+not an optimizer here.
+
+**Sherrington–Kirkpatrick, N=200** (beyond brute force; energy density vs the
+Parisi constant −0.7632). All samplers tie at −0.7453 — a +0.018 gap that is the
+expected O(N^{−2/3}) finite-size correction, not sampler error. On mean-field SK
+the landscape is easy enough that method choice barely matters.
+
 ## Development
 
 ```bash
