@@ -492,6 +492,262 @@ fn parallel_tempering_with_betas(
     Ok(results)
 }
 
+// --- Houdayer isoenergetic cluster moves (ICM) on top of parallel tempering ---
+//
+// The Houdayer move acts on TWO replicas held at the SAME temperature. It builds
+// the subgraph induced on the sites where the two replicas disagree, picks one
+// connected component (a "cluster"), and flips that cluster in BOTH replicas.
+// Because every site on the cluster boundary *agrees* between the two replicas,
+// the energy gained by one replica is exactly lost by the other: with no field
+// (h == 0) the joint energy E_a + E_b is conserved, so the move is rejection-
+// free. It tunnels through barriers that single-spin flips cannot cross.
+//
+// Effective on finite-dimensional / sparse graphs (e.g. the 3D Edwards-Anderson
+// lattice, which is also the regime of hardware spin-glass annealers). On a
+// fully connected graph (SK) the disagreeing sites percolate into one component,
+// so the move degenerates into a trivial global swap -- it does nothing useful.
+
+fn metropolis_sweep_lane(
+    model: &IsingModel,
+    betas: &[f64],
+    states: &mut [Vec<i64>],
+    energies: &mut [f64],
+    rng: &mut SmallRng,
+) {
+    let n = model.num_spins;
+    for k in 0..betas.len() {
+        let beta = betas[k];
+        for i in 0..n {
+            let s_i = states[k][i] as f64;
+            let mut field = model.h[i];
+            for &(j, w) in &model.neighbors[i] {
+                field += w * states[k][j] as f64;
+            }
+            let de = -2.0 * s_i * field;
+            if de <= 0.0 || rng.gen::<f64>() < (-beta * de).exp() {
+                states[k][i] = -states[k][i];
+                energies[k] += de;
+            }
+        }
+    }
+}
+
+fn pt_swap_lane(
+    betas: &[f64],
+    states: &mut [Vec<i64>],
+    energies: &mut [f64],
+    parity: usize,
+    rng: &mut SmallRng,
+) {
+    let r = betas.len();
+    let mut k = parity;
+    while k + 1 < r {
+        let delta = (betas[k + 1] - betas[k]) * (energies[k] - energies[k + 1]);
+        if delta >= 0.0 || rng.gen::<f64>() < delta.exp() {
+            states.swap(k, k + 1);
+            energies.swap(k, k + 1);
+        }
+        k += 2;
+    }
+}
+
+/// One Houdayer cluster move between two same-temperature replicas. Returns the
+/// number of spins flipped (0 if rejected or no disagreement). Updates the spin
+/// states and their energies in place.
+fn houdayer_cluster_move(
+    model: &IsingModel,
+    sa: &mut [i64],
+    sb: &mut [i64],
+    ea: &mut f64,
+    eb: &mut f64,
+    beta: f64,
+    rng: &mut SmallRng,
+) -> usize {
+    let n = model.num_spins;
+    let mut diff_sites: Vec<usize> = Vec::new();
+    for i in 0..n {
+        if sa[i] != sb[i] {
+            diff_sites.push(i);
+        }
+    }
+    if diff_sites.is_empty() {
+        return 0;
+    }
+    // Grow a connected cluster of disagreeing sites from a random seed.
+    let seed = diff_sites[rng.gen_range(0..diff_sites.len())];
+    let mut in_cluster = vec![false; n];
+    in_cluster[seed] = true;
+    let mut stack = vec![seed];
+    let mut cluster: Vec<usize> = Vec::new();
+    while let Some(u) = stack.pop() {
+        cluster.push(u);
+        for &(v, _w) in &model.neighbors[u] {
+            if !in_cluster[v] && sa[v] != sb[v] {
+                in_cluster[v] = true;
+                stack.push(v);
+            }
+        }
+    }
+    // Energy change from flipping the cluster. Only boundary bonds (one endpoint
+    // in the cluster, one outside) contribute; interior bonds are unchanged.
+    let mut d_a = 0.0;
+    let mut d_b = 0.0;
+    for &i in &cluster {
+        d_a += -2.0 * model.h[i] * sa[i] as f64;
+        d_b += -2.0 * model.h[i] * sb[i] as f64;
+        for &(j, w) in &model.neighbors[i] {
+            if !in_cluster[j] {
+                d_a += -2.0 * w * sa[i] as f64 * sa[j] as f64;
+                d_b += -2.0 * w * sb[i] as f64 * sb[j] as f64;
+            }
+        }
+    }
+    // Both replicas share temperature beta; accept on the joint energy change.
+    // With h == 0 the boundary terms cancel (d_a + d_b == 0) and this is always
+    // accepted. The Metropolis test keeps the move correct even if h != 0.
+    let d_total = d_a + d_b;
+    if d_total <= 0.0 || rng.gen::<f64>() < (-beta * d_total).exp() {
+        for &i in &cluster {
+            sa[i] = -sa[i];
+            sb[i] = -sb[i];
+        }
+        *ea += d_a;
+        *eb += d_b;
+        cluster.len()
+    } else {
+        0
+    }
+}
+
+fn pt_houdayer_one(
+    model: &IsingModel,
+    betas: &[f64],
+    num_sweeps: usize,
+    swap_every: usize,
+    icm_every: usize,
+    rng: &mut SmallRng,
+) -> (Vec<i64>, f64) {
+    let n = model.num_spins;
+    let r = betas.len();
+
+    // Two independent lanes of R replicas. The Houdayer move couples the two
+    // lanes at matching temperatures; PT swaps act within each lane.
+    let rand_states = |rng: &mut SmallRng| -> Vec<Vec<i64>> {
+        (0..r)
+            .map(|_| (0..n).map(|_| if rng.gen::<bool>() { 1 } else { -1 }).collect())
+            .collect()
+    };
+    let mut sa = rand_states(rng);
+    let mut sb = rand_states(rng);
+    let mut ea: Vec<f64> = sa.iter().map(|s| compute_energy(model, s)).collect();
+    let mut eb: Vec<f64> = sb.iter().map(|s| compute_energy(model, s)).collect();
+
+    let mut best_state = sa[0].clone();
+    let mut best_energy = f64::INFINITY;
+    let update_best = |states: &[Vec<i64>], energies: &[f64],
+                       best_state: &mut Vec<i64>, best_energy: &mut f64| {
+        for k in 0..r {
+            if energies[k] < *best_energy {
+                *best_energy = energies[k];
+                best_state.copy_from_slice(&states[k]);
+            }
+        }
+    };
+    update_best(&sa, &ea, &mut best_state, &mut best_energy);
+    update_best(&sb, &eb, &mut best_state, &mut best_energy);
+
+    for sweep in 0..num_sweeps {
+        metropolis_sweep_lane(model, betas, &mut sa, &mut ea, rng);
+        metropolis_sweep_lane(model, betas, &mut sb, &mut eb, rng);
+        update_best(&sa, &ea, &mut best_state, &mut best_energy);
+        update_best(&sb, &eb, &mut best_state, &mut best_energy);
+
+        if (sweep + 1) % swap_every == 0 {
+            let parity = sweep % 2;
+            pt_swap_lane(betas, &mut sa, &mut ea, parity, rng);
+            pt_swap_lane(betas, &mut sb, &mut eb, parity, rng);
+        }
+
+        if (sweep + 1) % icm_every == 0 {
+            for k in 0..r {
+                houdayer_cluster_move(
+                    model, &mut sa[k], &mut sb[k], &mut ea[k], &mut eb[k], betas[k], rng,
+                );
+            }
+            update_best(&sa, &ea, &mut best_state, &mut best_energy);
+            update_best(&sb, &eb, &mut best_state, &mut best_energy);
+        }
+    }
+
+    // Recompute exactly to shed any incremental floating-point drift.
+    let best_energy = compute_energy(model, &best_state);
+    (best_state, best_energy)
+}
+
+#[pyfunction]
+#[pyo3(signature = (
+    model,
+    num_sweeps=1000,
+    num_replicas=8,
+    beta_min=0.1,
+    beta_max=10.0,
+    swap_every=1,
+    icm_every=10,
+    num_reads=1,
+    seed=None,
+))]
+#[allow(clippy::too_many_arguments)]
+fn parallel_tempering_houdayer(
+    py: Python<'_>,
+    model: &IsingModel,
+    num_sweeps: usize,
+    num_replicas: usize,
+    beta_min: f64,
+    beta_max: f64,
+    swap_every: usize,
+    icm_every: usize,
+    num_reads: usize,
+    seed: Option<u64>,
+) -> PyResult<Vec<(Vec<i64>, f64)>> {
+    if num_replicas < 2 {
+        return Err(PyValueError::new_err("num_replicas must be >= 2"));
+    }
+    if !(beta_min > 0.0) || !(beta_max > beta_min) {
+        return Err(PyValueError::new_err("require 0 < beta_min < beta_max"));
+    }
+    if swap_every == 0 {
+        return Err(PyValueError::new_err("swap_every must be >= 1"));
+    }
+    if icm_every == 0 {
+        return Err(PyValueError::new_err("icm_every must be >= 1"));
+    }
+
+    let log_lo = beta_min.ln();
+    let log_hi = beta_max.ln();
+    let denom = (num_replicas - 1) as f64;
+    let betas: Vec<f64> = (0..num_replicas)
+        .map(|k| (log_lo + (log_hi - log_lo) * (k as f64 / denom)).exp())
+        .collect();
+
+    let mut master = match seed {
+        Some(s) => SmallRng::seed_from_u64(s),
+        None => SmallRng::from_entropy(),
+    };
+    let chain_seeds: Vec<u64> = (0..num_reads).map(|_| master.gen()).collect();
+    let model = model.clone();
+
+    let results = py.allow_threads(|| {
+        chain_seeds
+            .into_par_iter()
+            .map(|s| {
+                let mut rng = SmallRng::seed_from_u64(s);
+                pt_houdayer_one(&model, &betas, num_sweeps, swap_every, icm_every, &mut rng)
+            })
+            .collect()
+    });
+    Ok(results)
+}
+
 fn bits_to_state(bits: u64, n: usize) -> Vec<i64> {
     (0..n).map(|i| if (bits >> i) & 1 == 1 { 1 } else { -1 }).collect()
 }
@@ -533,6 +789,7 @@ fn _kernel(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parallel_tempering, m)?)?;
     m.add_function(wrap_pyfunction!(parallel_tempering_diagnostic, m)?)?;
     m.add_function(wrap_pyfunction!(parallel_tempering_with_betas, m)?)?;
+    m.add_function(wrap_pyfunction!(parallel_tempering_houdayer, m)?)?;
     m.add_function(wrap_pyfunction!(brute_force_min_energy, m)?)?;
     m.add_function(wrap_pyfunction!(brute_force_ground_state, m)?)?;
     Ok(())

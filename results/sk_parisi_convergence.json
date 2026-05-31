@@ -1,0 +1,33 @@
+{
+  "experiment": "sk_parisi_convergence",
+  "parisi_density": -0.7631667,
+  "num_replicas": 24,
+  "num_sweeps": 8000,
+  "reads": 16,
+  "rows": [
+    {
+      "n": 50,
+      "energy_density": -0.6647247677193008,
+      "gap_to_parisi": 0.0984419322806992,
+      "parisi_reference_energy": -269.82017437287976
+    },
+    {
+      "n": 100,
+      "energy_density": -0.7308542398091805,
+      "gap_to_parisi": 0.03231246019081946,
+      "parisi_reference_energy": -763.1667
+    },
+    {
+      "n": 200,
+      "energy_density": -0.7450154327770835,
+      "gap_to_parisi": 0.01815126722291649,
+      "parisi_reference_energy": -2158.561394983038
+    },
+    {
+      "n": 400,
+      "energy_density": -0.7534543236162083,
+      "gap_to_parisi": 0.009712376383791632,
+      "parisi_reference_energy": -6105.3336
+    }
+  ]
+}

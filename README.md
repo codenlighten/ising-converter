@@ -21,6 +21,7 @@ and the QUBO form is the binary (`x_i in {0, 1}`) equivalent, related by
 - **Rust kernel** (`src/lib.rs`, exposed as `ising_lab._kernel`)
   - `simulated_anneal` — geometric beta schedule, parallel reads via rayon
   - `parallel_tempering` / `parallel_tempering_diagnostic` / `parallel_tempering_with_betas`
+  - `parallel_tempering_houdayer` — PT with Houdayer isoenergetic cluster moves
   - `brute_force_ground_state` / `brute_force_min_energy` (exact, N ≤ 30)
   - Deterministic for a fixed `seed`, regardless of thread scheduling.
 - **Problem encoders** (`ising_lab.problems`) — reference implementations of the
@@ -112,6 +113,45 @@ sampleset = sampler.sample(my_bqm, num_sweeps=1000, num_reads=100, seed=1)
 
 # or wrap an external dimod sampler (e.g. neal) into the benchmark harness:
 from ising_lab.benchmarks import wrap_dimod
+```
+
+## Cluster moves and the Parisi yardstick
+
+Two physics-aware tools for the hard spin-glass regime (`scripts/bench_houdayer.py`):
+
+- **Houdayer-PT** (`parallel_tempering_houdayer`) layers **isoenergetic cluster
+  moves** on parallel tempering. It runs two replica lanes and flips connected
+  clusters of disagreeing spins, tunnelling through barriers single-spin flips
+  cannot cross. This is effective on **sparse / finite-dimensional** graphs —
+  the 3D Edwards–Anderson lattice, which is also the regime of hardware
+  spin-glass annealers. On a fully connected SK instance the disagreement graph
+  percolates into one cluster and the move degenerates to a trivial global swap,
+  so use plain `parallel_tempering` there. At matched compute on L=8 (N=512)
+  Gaussian 3D EA, Houdayer-PT reaches lower mean energy on 8/8 benchmark
+  instances (see `results/houdayer_vs_pt_ea3d.json`).
+
+- **Parisi density as truth** (`sk_parisi_reference_energy`,
+  `PARISI_SK_ENERGY_DENSITY`). The SK ground-state energy density converges to
+  the analytically known Parisi constant, `E₀/N → −0.7632`, i.e.
+  `E₀ ≈ −0.7632·N^{3/2}` for these un-normalized couplings. This gives an
+  **absolute** large-N yardstick where brute force is hopeless — finite systems
+  sit just above it by an O(N^{−2/3}) finite-size correction
+  (`results/sk_parisi_convergence.json`).
+
+```python
+import ising_lab as il
+from ising_lab.benchmarks import ea_instance, sk_instance, sk_energy_density
+
+# Cluster-move PT on a 3D EA lattice
+inst = ea_instance(8, seed=0, dimension=3, distribution="gaussian")
+res = il.parallel_tempering_houdayer(
+    inst.model, num_sweeps=2000, num_replicas=24, icm_every=5, num_reads=16, seed=0,
+)
+
+# How close is a sample to the Parisi thermodynamic-limit density?
+sk = sk_instance(400, seed=0, distribution="gaussian")
+r = il.parallel_tempering(sk.model, num_sweeps=8000, num_replicas=24, num_reads=16, seed=0)
+print(sk_energy_density(min(e for _, e in r), 400))   # -> approaches -0.7632
 ```
 
 ## Development

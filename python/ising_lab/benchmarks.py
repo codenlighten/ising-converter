@@ -30,10 +30,17 @@ from ._kernel import (
     brute_force_ground_state,
     parallel_tempering,
     parallel_tempering_diagnostic,
+    parallel_tempering_houdayer,
     parallel_tempering_with_betas,
     simulated_anneal,
 )
 from .registry import OptimumRegistry, sk_instance_key
+
+# Parisi ground-state energy density of the Sherrington-Kirkpatrick model:
+#   lim_{N->inf} E_0 / N  =  -0.763166... for the canonically normalized SK
+#   Hamiltonian H = (1/sqrt(N)) sum_{i<j} J_ij s_i s_j with Var(J_ij) = 1.
+# Source: Parisi RSB solution; numerical value e.g. Crisanti-Rizzo (2002).
+PARISI_SK_ENERGY_DENSITY = 0.7631667
 
 SamplerFn = Callable[[IsingModel, int], List[tuple]]
 PathLike = Union[str, Path]
@@ -69,6 +76,31 @@ def pt_beta_ladder(beta_min: float, beta_max: float, num_replicas: int) -> List[
     log_hi = math.log(beta_max)
     denom = num_replicas - 1
     return [math.exp(log_lo + (log_hi - log_lo) * (k / denom)) for k in range(num_replicas)]
+
+
+def sk_energy_density(energy: float, n: int) -> float:
+    """Canonical SK energy density of a raw energy on one of our SK instances.
+
+    Our SK couplings are un-normalized (Var(J_ij) = 1), so the raw energy scales
+    as N^{3/2} relative to the canonically normalized SK Hamiltonian. Dividing by
+    N^{3/2} yields a quantity directly comparable to the Parisi density
+    `-PARISI_SK_ENERGY_DENSITY` in the thermodynamic limit.
+    """
+    return energy / (n ** 1.5)
+
+
+def sk_parisi_reference_energy(n: int) -> float:
+    """Asymptotic Parisi ground-state energy for one of our un-normalized SK
+    instances: `-PARISI_SK_ENERGY_DENSITY * N^{3/2}`.
+
+    This is the N -> infinity yardstick, not the exact finite-N ground state:
+    finite systems sit *above* it by an O(N^{-2/3}) finite-size correction. Use
+    it as an absolute reference scale at large N (where brute force is hopeless),
+    e.g. to report `energy / reference` (-> 1 from above) or the density gap to
+    the thermodynamic limit. By SK universality it applies to both the binary
+    (+/-1) and Gaussian instances, whose couplings share Var(J_ij) = 1.
+    """
+    return -PARISI_SK_ENERGY_DENSITY * (n ** 1.5)
 
 
 def parallel_tempering_with_diagnostics(
@@ -697,6 +729,42 @@ def wrap_pt(
     return _run
 
 
+def wrap_pt_houdayer(
+    num_sweeps: int = 1000,
+    num_replicas: int = 8,
+    beta_min: float = 0.1,
+    beta_max: float = 10.0,
+    swap_every: int = 1,
+    icm_every: int = 10,
+    seed: Optional[int] = None,
+) -> SamplerFn:
+    """Build a sampler for `parallel_tempering_houdayer` with frozen hyperparams.
+
+    Houdayer isoenergetic cluster moves (ICM) layered on PT. The move runs two
+    replica lanes and tunnels through barriers via connected disagreement
+    clusters -- effective on sparse / finite-dimensional graphs (e.g. the 3D
+    Edwards-Anderson lattice, the regime of hardware spin-glass annealers). On a
+    fully connected SK instance the clusters percolate and the move is a no-op,
+    so prefer `wrap_pt` there. Note this runs 2x the replicas of plain PT per
+    read; match `num_reads` accordingly for fair comparisons.
+    """
+
+    def _run(model: IsingModel, num_reads: int) -> List[tuple]:
+        return parallel_tempering_houdayer(
+            model,
+            num_sweeps=num_sweeps,
+            num_replicas=num_replicas,
+            beta_min=beta_min,
+            beta_max=beta_max,
+            swap_every=swap_every,
+            icm_every=icm_every,
+            num_reads=num_reads,
+            seed=seed,
+        )
+
+    return _run
+
+
 def records_to_csv(
     records: Iterable["BenchmarkRecord"],
     path: PathLike,
@@ -814,7 +882,11 @@ __all__ = [
     "wrap_sa",
     "wrap_pt",
     "wrap_pt_tuned",
+    "wrap_pt_houdayer",
     "wrap_dimod",
+    "sk_energy_density",
+    "sk_parisi_reference_energy",
+    "PARISI_SK_ENERGY_DENSITY",
     "pt_beta_ladder",
     "parallel_tempering_with_diagnostics",
     "parallel_tempering_betas",
