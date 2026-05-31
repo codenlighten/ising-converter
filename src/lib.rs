@@ -507,6 +507,33 @@ fn parallel_tempering_with_betas(
 // fully connected graph (SK) the disagreeing sites percolate into one component,
 // so the move degenerates into a trivial global swap -- it does nothing useful.
 
+// One or more single-spin Metropolis sweeps of a single configuration at fixed
+// inverse temperature `beta`, tracking the energy incrementally.
+fn metropolis_config(
+    model: &IsingModel,
+    state: &mut [i64],
+    energy: &mut f64,
+    beta: f64,
+    sweeps: usize,
+    rng: &mut SmallRng,
+) {
+    let n = model.num_spins;
+    for _ in 0..sweeps {
+        for i in 0..n {
+            let s_i = state[i] as f64;
+            let mut field = model.h[i];
+            for &(j, w) in &model.neighbors[i] {
+                field += w * state[j] as f64;
+            }
+            let de = -2.0 * s_i * field;
+            if de <= 0.0 || rng.gen::<f64>() < (-beta * de).exp() {
+                state[i] = -state[i];
+                *energy += de;
+            }
+        }
+    }
+}
+
 fn metropolis_sweep_lane(
     model: &IsingModel,
     betas: &[f64],
@@ -748,6 +775,151 @@ fn parallel_tempering_houdayer(
     Ok(results)
 }
 
+// --- Population annealing ---
+//
+// A sequential Monte Carlo method: carry a *population* of configurations and
+// anneal beta up through a schedule. At each step the population is resampled
+// by the Boltzmann reweighting factor exp(-d_beta * E) -- low-energy replicas
+// multiply, high-energy replicas die -- then each survivor is equilibrated with
+// Metropolis sweeps. The resampling concentrates the population in low-energy
+// basins, which makes PA strong on rough spin-glass landscapes.
+// (Hukushima-Iba 2003; Machta 2010; Wang-Machta-Katzgraber 2015.)
+
+fn pa_one(
+    model: &IsingModel,
+    betas: &[f64],
+    population: usize,
+    sweeps_per_temp: usize,
+    rng: &mut SmallRng,
+) -> (Vec<i64>, f64) {
+    let n = model.num_spins;
+
+    // Initialize a random population and equilibrate it at the first beta.
+    let mut pop: Vec<Vec<i64>> = (0..population)
+        .map(|_| (0..n).map(|_| if rng.gen::<bool>() { 1 } else { -1 }).collect())
+        .collect();
+    let mut energy: Vec<f64> = pop.iter().map(|s| compute_energy(model, s)).collect();
+    for k in 0..pop.len() {
+        metropolis_config(model, &mut pop[k], &mut energy[k], betas[0], sweeps_per_temp, rng);
+    }
+
+    let mut best_state = pop[0].clone();
+    let mut best_energy = f64::INFINITY;
+    for k in 0..pop.len() {
+        if energy[k] < best_energy {
+            best_energy = energy[k];
+            best_state.copy_from_slice(&pop[k]);
+        }
+    }
+
+    for t in 1..betas.len() {
+        let d_beta = betas[t] - betas[t - 1];
+
+        // Reweight: w_j = exp(-d_beta * (E_j - E_min)). Subtracting the minimum
+        // energy keeps the exponent <= 0 (no overflow); only ratios matter.
+        let e_min = energy.iter().cloned().fold(f64::INFINITY, f64::min);
+        let weights: Vec<f64> = energy.iter().map(|&e| (-d_beta * (e - e_min)).exp()).collect();
+        let sum_w: f64 = weights.iter().sum();
+
+        // Expected copies of replica j = population * w_j / sum_w. This both
+        // resamples by Boltzmann weight and controls the population back to the
+        // target size each step (the expected new size is exactly `population`).
+        let mut new_pop: Vec<Vec<i64>> = Vec::with_capacity(population);
+        let mut new_energy: Vec<f64> = Vec::with_capacity(population);
+        for j in 0..pop.len() {
+            let expected = population as f64 * weights[j] / sum_w;
+            let floor = expected.floor();
+            let mut copies = floor as usize;
+            if rng.gen::<f64>() < expected - floor {
+                copies += 1;
+            }
+            for _ in 0..copies {
+                new_pop.push(pop[j].clone());
+                new_energy.push(energy[j]);
+            }
+        }
+        // Guard against an empty population (possible only in pathological cases).
+        if new_pop.is_empty() {
+            new_pop.push(best_state.clone());
+            new_energy.push(best_energy);
+        }
+        pop = new_pop;
+        energy = new_energy;
+
+        // Equilibrate the resampled population at the new beta.
+        for k in 0..pop.len() {
+            metropolis_config(model, &mut pop[k], &mut energy[k], betas[t], sweeps_per_temp, rng);
+            if energy[k] < best_energy {
+                best_energy = energy[k];
+                best_state.copy_from_slice(&pop[k]);
+            }
+        }
+    }
+
+    let best_energy = compute_energy(model, &best_state);
+    (best_state, best_energy)
+}
+
+#[pyfunction]
+#[pyo3(signature = (
+    model,
+    num_temps=30,
+    population=50,
+    num_sweeps=10,
+    beta_min=0.1,
+    beta_max=10.0,
+    num_reads=1,
+    seed=None,
+))]
+#[allow(clippy::too_many_arguments)]
+fn population_annealing(
+    py: Python<'_>,
+    model: &IsingModel,
+    num_temps: usize,
+    population: usize,
+    num_sweeps: usize,
+    beta_min: f64,
+    beta_max: f64,
+    num_reads: usize,
+    seed: Option<u64>,
+) -> PyResult<Vec<(Vec<i64>, f64)>> {
+    if num_temps < 2 {
+        return Err(PyValueError::new_err("num_temps must be >= 2"));
+    }
+    if population < 1 {
+        return Err(PyValueError::new_err("population must be >= 1"));
+    }
+    if !(beta_min > 0.0) || !(beta_max > beta_min) {
+        return Err(PyValueError::new_err("require 0 < beta_min < beta_max"));
+    }
+
+    // Geometric (linear-in-log) beta schedule, matching the rest of the lab.
+    let log_lo = beta_min.ln();
+    let log_hi = beta_max.ln();
+    let denom = (num_temps - 1) as f64;
+    let betas: Vec<f64> = (0..num_temps)
+        .map(|k| (log_lo + (log_hi - log_lo) * (k as f64 / denom)).exp())
+        .collect();
+
+    let mut master = match seed {
+        Some(s) => SmallRng::seed_from_u64(s),
+        None => SmallRng::from_entropy(),
+    };
+    let chain_seeds: Vec<u64> = (0..num_reads).map(|_| master.gen()).collect();
+    let model = model.clone();
+
+    let results = py.allow_threads(|| {
+        chain_seeds
+            .into_par_iter()
+            .map(|s| {
+                let mut rng = SmallRng::seed_from_u64(s);
+                pa_one(&model, &betas, population, num_sweeps, &mut rng)
+            })
+            .collect()
+    });
+    Ok(results)
+}
+
 fn bits_to_state(bits: u64, n: usize) -> Vec<i64> {
     (0..n).map(|i| if (bits >> i) & 1 == 1 { 1 } else { -1 }).collect()
 }
@@ -790,6 +962,7 @@ fn _kernel(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parallel_tempering_diagnostic, m)?)?;
     m.add_function(wrap_pyfunction!(parallel_tempering_with_betas, m)?)?;
     m.add_function(wrap_pyfunction!(parallel_tempering_houdayer, m)?)?;
+    m.add_function(wrap_pyfunction!(population_annealing, m)?)?;
     m.add_function(wrap_pyfunction!(brute_force_min_energy, m)?)?;
     m.add_function(wrap_pyfunction!(brute_force_ground_state, m)?)?;
     Ok(())

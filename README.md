@@ -22,6 +22,7 @@ and the QUBO form is the binary (`x_i in {0, 1}`) equivalent, related by
   - `simulated_anneal` — geometric beta schedule, parallel reads via rayon
   - `parallel_tempering` / `parallel_tempering_diagnostic` / `parallel_tempering_with_betas`
   - `parallel_tempering_houdayer` — PT with Houdayer isoenergetic cluster moves
+  - `population_annealing` — sequential Monte Carlo with Boltzmann resampling
   - `brute_force_ground_state` / `brute_force_min_energy` (exact, N ≤ 30)
   - Deterministic for a fixed `seed`, regardless of thread scheduling.
 - **Problem encoders** (`ising_lab.problems`) — reference implementations of the
@@ -129,6 +130,15 @@ Two physics-aware tools for the hard spin-glass regime (`scripts/bench_houdayer.
   so use plain `parallel_tempering` there. At matched compute on L=8 (N=512)
   Gaussian 3D EA, Houdayer-PT reaches lower mean energy on 8/8 benchmark
   instances (see `results/houdayer_vs_pt_ea3d.json`).
+
+- **Population annealing** (`population_annealing`) carries a *population* of
+  replicas and anneals β upward, **resampling** by the Boltzmann factor
+  `exp(−Δβ·E)` at each step (low-energy replicas multiply, high-energy ones die)
+  before equilibrating with Metropolis sweeps. On hard 3D EA Gaussian glasses it
+  is the strongest sampler here by a wide margin: on L=8 (N=512) it reaches
+  energies ~28 units lower than parallel tempering **even when PT is given 16×
+  the sweeps** (~50× the wall time), winning on 5/5 benchmark instances
+  (`results/population_vs_pt_ea3d.json`).
 
 - **Parisi density as truth** (`sk_parisi_reference_energy`,
   `PARISI_SK_ENERGY_DENSITY`). The SK ground-state energy density converges to

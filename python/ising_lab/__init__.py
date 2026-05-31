@@ -6,6 +6,7 @@ from ._kernel import (
     parallel_tempering,
     parallel_tempering_diagnostic,
     parallel_tempering_houdayer,
+    population_annealing,
     simulated_anneal,
 )
 from .qubo import QUBO, qubo_to_ising
@@ -18,6 +19,7 @@ __all__ = [
     "parallel_tempering",
     "parallel_tempering_diagnostic",
     "parallel_tempering_houdayer",
+    "population_annealing",
     "brute_force_min_energy",
     "brute_force_ground_state",
     "QUBO",
