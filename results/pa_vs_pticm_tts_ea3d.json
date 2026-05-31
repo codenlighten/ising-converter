@@ -1,0 +1,14 @@
+{
+  "experiment": "pa_vs_pticm_tts_ea3d",
+  "description": "Optimal work-to-solution (Monte Carlo sweep units) for population annealing vs PT-ICM (parallel tempering with isoenergetic cluster moves = Houdayer-PT), on 3D Edwards-Anderson Gaussian instances. PT-ICM is the classical baseline against which D-Wave's strongest optimization scaling-advantage claim (Munoz Bauza & Lidar, PRL 134, 160601, 2025) is measured.",
+  "metric": "optimal work-to-solution (sweep units; budget scanned, minimum taken), median over 4 instances per size",
+  "ground_truth": "heavy-PA floor (validated == brute force at N<=27)",
+  "reads_per_estimate": 60,
+  "rows": [
+    {"L": 4, "n": 64,  "pa_optimal_tts": 5238,  "pticm_optimal_tts": 33996,    "ratio_pticm_over_pa": 6},
+    {"L": 5, "n": 125, "pa_optimal_tts": 10690, "pticm_optimal_tts": 19236902, "ratio_pticm_over_pa": 1800},
+    {"L": 6, "n": 216, "pa_optimal_tts": 71229, "pticm_optimal_tts": null,     "ratio_pticm_over_pa": null,
+     "note": "PT-ICM did not reach the best-known energy at any tested budget (<= 512000 sweep units); PA solved it."}
+  ],
+  "caveat": "3D cubic EA Gaussian, our own kernel; NOT the 2D degree-5 high-precision graph of the D-Wave benchmark. The pattern (PA >> PT-ICM) is the point; absolute transfer to the D-Wave instance class is an untested hypothesis."
+}

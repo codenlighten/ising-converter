@@ -265,6 +265,20 @@ N≤27), not that PT cannot find the true ground state. (iii) PT's large-N W\*
 rests on few successes per 60 reads, so it is noisy to a factor of ~2 — far
 smaller than the gap.
 
+## Competing with D-Wave?
+
+D-Wave's strongest published *optimization* scaling-advantage claim (Munoz Bauza
+& Lidar, *Phys. Rev. Lett.* 134, 160601, 2025) is measured **against PT-ICM** —
+parallel tempering with isoenergetic cluster moves, i.e. this lab's
+`parallel_tempering_houdayer`. We independently find that **population annealing
+beats PT-ICM by ~6× at N=64, ~1,800× at N=125, and unboundedly by N=216** on 3D
+EA (work-to-solution, `results/pa_vs_pticm_tts_ea3d.json`). That motivates a
+falsifiable hypothesis — a PA baseline could erode the reported QA advantage —
+but it is **not** a refutation: their instance class (2D degree-5, high-precision)
+and metric (wall-clock time-to-epsilon) differ from ours, and we have not run
+their benchmark. The precise claim, caveats, and a roadmap to an honest
+head-to-head are in [docs/DWAVE_COMPARISON.md](docs/DWAVE_COMPARISON.md).
+
 ## Development
 
 ```bash
