@@ -23,6 +23,7 @@ and the QUBO form is the binary (`x_i in {0, 1}`) equivalent, related by
   - `parallel_tempering` / `parallel_tempering_diagnostic` / `parallel_tempering_with_betas`
   - `parallel_tempering_houdayer` — PT with Houdayer isoenergetic cluster moves
   - `population_annealing` — sequential Monte Carlo with Boltzmann resampling
+  - `belief_propagation` — deterministic sum-product inference (marginals, Bethe free energy)
   - `brute_force_ground_state` / `brute_force_min_energy` (exact, N ≤ 30)
   - Deterministic for a fixed `seed`, regardless of thread scheduling.
 - **Problem encoders** (`ising_lab.problems`) — reference implementations of the
@@ -139,6 +140,18 @@ Two physics-aware tools for the hard spin-glass regime (`scripts/bench_houdayer.
   energies ~28 units lower than parallel tempering **even when PT is given 16×
   the sweeps** (~50× the wall time), winning on 5/5 benchmark instances
   (`results/population_vs_pt_ea3d.json`).
+
+- **Belief propagation** (`belief_propagation`, `ising_lab.inference`) is a
+  deterministic message-passing alternative to Monte Carlo. It returns spin
+  marginals and the **Bethe free energy** — observables the samplers don't
+  directly produce — **exact on trees** (validated to machine precision; a
+  2000-node tree converges in ~0.05 s, where brute force would need 2²⁰⁰⁰
+  evaluations), and the Bethe approximation on loopy graphs. Honest limitation:
+  as a *ground-state* heuristic it is weak on frustrated loopy glasses — rounding
+  its marginals on 3D EA lands far above population annealing (it may "converge"
+  to a useless fixed point). That failure is exactly what loop-corrected BP and
+  tensor-network methods exist to fix; BP here is the correct, fast inference
+  core to build those on, not a 3D-glass optimizer.
 
 - **Parisi density as truth** (`sk_parisi_reference_energy`,
   `PARISI_SK_ENERGY_DENSITY`). The SK ground-state energy density converges to

@@ -920,6 +920,119 @@ fn population_annealing(
     Ok(results)
 }
 
+// --- Belief propagation (sum-product, Bethe approximation) ---
+//
+// A deterministic message-passing alternative to Monte Carlo. Messages are
+// parametrized as log-field scalars: m_{i->j}(s) ∝ exp(M_{i->j} * s). The update
+// for our Hamiltonian H = sum h_i s_i + sum J_ij s_i s_j (Boltzmann exp(-beta H)) is
+//
+//   M_{i->j} = (1/2) [ ln cosh(A - beta J_ij) - ln cosh(A + beta J_ij) ],
+//   A = -beta h_i + sum_{k in d(i)\j} M_{k->i}    (the cavity field on i).
+//
+// On a tree the fixed point is exact (marginals and the Bethe free energy equal
+// the true ones). On loopy graphs it is the Bethe approximation: fast and often
+// accurate on sparse/weakly-frustrated graphs, but it may fail to converge on
+// frustrated loopy ones (e.g. 3D spin glasses) -- which is why it is paired with
+// damping and a convergence flag the caller can inspect.
+
+#[pyfunction]
+#[pyo3(signature = (model, beta, max_iters=1000, damping=0.5, tol=1e-8))]
+fn belief_propagation(
+    model: &IsingModel,
+    beta: f64,
+    max_iters: usize,
+    damping: f64,
+    tol: f64,
+) -> PyResult<(Vec<f64>, f64, bool, usize)> {
+    if !(beta > 0.0) {
+        return Err(PyValueError::new_err("beta must be > 0"));
+    }
+    if !(0.0..1.0).contains(&damping) {
+        return Err(PyValueError::new_err("damping must be in [0, 1)"));
+    }
+    let n = model.num_spins;
+
+    // msg[i][t] is the message M_{i -> neighbors[i][t].0}.
+    let mut msg: Vec<Vec<f64>> = model.neighbors.iter().map(|nb| vec![0.0; nb.len()]).collect();
+    // rev[i][t] = index of i within neighbors[neighbors[i][t].0], so that the
+    // reverse message M_{j->i} is msg[j][rev[i][t]].
+    let rev: Vec<Vec<usize>> = (0..n)
+        .map(|i| {
+            model.neighbors[i]
+                .iter()
+                .map(|&(j, _)| model.neighbors[j].iter().position(|&(k, _)| k == i).unwrap())
+                .collect()
+        })
+        .collect();
+
+    // Full incoming field at i: B_i = -beta h_i + sum_{k in d(i)} M_{k->i}.
+    let full_field = |msg: &[Vec<f64>], i: usize| -> f64 {
+        let mut b = -beta * model.h[i];
+        for t in 0..model.neighbors[i].len() {
+            let k = model.neighbors[i][t].0;
+            b += msg[k][rev[i][t]];
+        }
+        b
+    };
+
+    let mut converged = false;
+    let mut iters = 0;
+    for it in 0..max_iters {
+        iters = it + 1;
+        let mut max_diff = 0.0_f64;
+        let mut new_msg = msg.clone();
+        for i in 0..n {
+            let b = full_field(&msg, i);
+            for t in 0..model.neighbors[i].len() {
+                let (j, w) = model.neighbors[i][t];
+                let a = b - msg[j][rev[i][t]]; // cavity field excluding j
+                let computed =
+                    0.5 * ((a - beta * w).cosh().ln() - (a + beta * w).cosh().ln());
+                let updated = damping * msg[i][t] + (1.0 - damping) * computed;
+                max_diff = max_diff.max((updated - msg[i][t]).abs());
+                new_msg[i][t] = updated;
+            }
+        }
+        msg = new_msg;
+        if max_diff < tol {
+            converged = true;
+            break;
+        }
+    }
+
+    // Marginal magnetizations m_i = <s_i> = tanh(B_i).
+    let marginals: Vec<f64> = (0..n).map(|i| full_field(&msg, i).tanh()).collect();
+
+    // Bethe free energy:  -beta F = sum_i (1 - d_i) ln Z_i + sum_{(ij)} ln Z_ij,
+    // with node term Z_i = 2 cosh(B_i) and edge term over the two-spin cavity
+    // marginal. Exact on a tree.
+    let mut neg_beta_f = 0.0;
+    for i in 0..n {
+        let d_i = model.neighbors[i].len() as f64;
+        neg_beta_f += (1.0 - d_i) * (2.0 * full_field(&msg, i).cosh()).ln();
+    }
+    for i in 0..n {
+        let b_i = full_field(&msg, i);
+        for t in 0..model.neighbors[i].len() {
+            let (j, w) = model.neighbors[i][t];
+            if j < i {
+                continue; // count each edge once
+            }
+            let a_i = b_i - msg[j][rev[i][t]]; // cavity on i excluding j
+            let a_j = full_field(&msg, j) - msg[i][t]; // cavity on j excluding i
+            let mut z_ij = 0.0;
+            for &si in &[1.0f64, -1.0] {
+                for &sj in &[1.0f64, -1.0] {
+                    z_ij += (-beta * w * si * sj + a_i * si + a_j * sj).exp();
+                }
+            }
+            neg_beta_f += z_ij.ln();
+        }
+    }
+
+    Ok((marginals, -neg_beta_f / beta, converged, iters))
+}
+
 fn bits_to_state(bits: u64, n: usize) -> Vec<i64> {
     (0..n).map(|i| if (bits >> i) & 1 == 1 { 1 } else { -1 }).collect()
 }
@@ -963,6 +1076,7 @@ fn _kernel(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parallel_tempering_with_betas, m)?)?;
     m.add_function(wrap_pyfunction!(parallel_tempering_houdayer, m)?)?;
     m.add_function(wrap_pyfunction!(population_annealing, m)?)?;
+    m.add_function(wrap_pyfunction!(belief_propagation, m)?)?;
     m.add_function(wrap_pyfunction!(brute_force_min_energy, m)?)?;
     m.add_function(wrap_pyfunction!(brute_force_ground_state, m)?)?;
     Ok(())

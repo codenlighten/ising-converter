@@ -1,6 +1,7 @@
 """ising_lab: convert combinatorial problems into Ising/QUBO form and solve them."""
 from ._kernel import (
     IsingModel,
+    belief_propagation,
     brute_force_ground_state,
     brute_force_min_energy,
     parallel_tempering,
@@ -11,7 +12,8 @@ from ._kernel import (
 )
 from .qubo import QUBO, qubo_to_ising
 from .registry import BestKnown, OptimumRegistry, sk_instance_key
-from . import benchmarks, problems
+from .inference import bp_ground_state, bp_marginals
+from . import benchmarks, inference, problems
 
 __all__ = [
     "IsingModel",
@@ -20,6 +22,9 @@ __all__ = [
     "parallel_tempering_diagnostic",
     "parallel_tempering_houdayer",
     "population_annealing",
+    "belief_propagation",
+    "bp_marginals",
+    "bp_ground_state",
     "brute_force_min_energy",
     "brute_force_ground_state",
     "QUBO",
@@ -29,4 +34,5 @@ __all__ = [
     "sk_instance_key",
     "problems",
     "benchmarks",
+    "inference",
 ]
