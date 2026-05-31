@@ -12,7 +12,7 @@ from ._kernel import (
 )
 from .qubo import QUBO, qubo_to_ising
 from .registry import BestKnown, OptimumRegistry, sk_instance_key
-from .inference import bp_ground_state, bp_marginals
+from .inference import bp_ground_state, bp_marginals, loop_corrected_free_energy
 from . import benchmarks, inference, problems
 
 __all__ = [
@@ -25,6 +25,7 @@ __all__ = [
     "belief_propagation",
     "bp_marginals",
     "bp_ground_state",
+    "loop_corrected_free_energy",
     "brute_force_min_energy",
     "brute_force_ground_state",
     "QUBO",

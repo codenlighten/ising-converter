@@ -153,6 +153,17 @@ Two physics-aware tools for the hard spin-glass regime (`scripts/bench_houdayer.
   tensor-network methods exist to fix; BP here is the correct, fast inference
   core to build those on, not a 3D-glass optimizer.
 
+- **Loop-corrected BP** (`loop_corrected_free_energy`) implements the
+  Chertkov–Chernyak loop series: `Z = Z_Bethe · (1 + Σ over generalized loops)`,
+  truncated at simple cycles, each cycle contributing
+  `Π_{(ij)∈C} χ_ij / √((1−m_i²)(1−m_j²))`. It is **exact on a single cycle**
+  (a ring — validated to machine precision) and a large, systematic improvement
+  on loopy graphs: on brute-forceable 3×3–4×4 frustrated grids it cuts the
+  free-energy error by ~3×–600× (`results/loop_bp_free_energy.json`). Honest
+  limitation: the truncation drops higher-order generalized loops, so the gain
+  shrinks with graph density and can slightly *overshoot* when Bethe is already
+  near-exact — a principled leading-order correction, not a black box.
+
 - **Parisi density as truth** (`sk_parisi_reference_energy`,
   `PARISI_SK_ENERGY_DENSITY`). The SK ground-state energy density converges to
   the analytically known Parisi constant, `E₀/N → −0.7632`, i.e.

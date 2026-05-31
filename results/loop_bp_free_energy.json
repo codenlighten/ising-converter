@@ -1,0 +1,88 @@
+{
+  "experiment": "loop_corrected_bp_free_energy",
+  "beta": 0.6,
+  "method": "Chertkov-Chernyak simple-cycle truncation (max_cycle_len=8)",
+  "rows": [
+    {
+      "graph": "ring-8",
+      "n": 8,
+      "bethe_err": 0.0023710956149542994,
+      "loop_err": 1.7763568394002505e-15,
+      "cycles": 1,
+      "converged": true
+    },
+    {
+      "graph": "3x3-s0",
+      "n": 9,
+      "bethe_err": 0.2794323682137225,
+      "loop_err": 0.00044345752888119705,
+      "cycles": 13,
+      "converged": true
+    },
+    {
+      "graph": "3x3-s1",
+      "n": 9,
+      "bethe_err": 0.43754516984001235,
+      "loop_err": 0.027051898206535085,
+      "cycles": 13,
+      "converged": true
+    },
+    {
+      "graph": "3x3-s2",
+      "n": 9,
+      "bethe_err": 0.27332645793643984,
+      "loop_err": 0.0027322948270160907,
+      "cycles": 13,
+      "converged": true
+    },
+    {
+      "graph": "3x4-s0",
+      "n": 12,
+      "bethe_err": 0.3861552014864884,
+      "loop_err": 0.10058222014794183,
+      "cycles": 25,
+      "converged": true
+    },
+    {
+      "graph": "3x4-s1",
+      "n": 12,
+      "bethe_err": 0.31879754694352513,
+      "loop_err": 0.02139231002009012,
+      "cycles": 25,
+      "converged": true
+    },
+    {
+      "graph": "3x4-s2",
+      "n": 12,
+      "bethe_err": 0.04621424898161308,
+      "loop_err": 0.030251524130250118,
+      "cycles": 25,
+      "converged": true
+    },
+    {
+      "graph": "4x4-s0",
+      "n": 16,
+      "bethe_err": 0.21144312793459008,
+      "loop_err": 0.05761699688003219,
+      "cycles": 47,
+      "converged": true
+    },
+    {
+      "graph": "4x4-s1",
+      "n": 16,
+      "bethe_err": 0.449395872692822,
+      "loop_err": 0.16017071847335274,
+      "cycles": 47,
+      "converged": true
+    },
+    {
+      "graph": "4x4-s2",
+      "n": 16,
+      "bethe_err": 0.040356340991230866,
+      "loop_err": 0.047908282307087546,
+      "cycles": 47,
+      "converged": true
+    }
+  ],
+  "mean_improvement_factor": 133480816676.9919
+}

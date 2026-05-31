@@ -935,6 +935,97 @@ fn population_annealing(
 // frustrated loopy ones (e.g. 3D spin glasses) -- which is why it is paired with
 // damping and a convergence flag the caller can inspect.
 
+// Build the reverse-edge index: rev[i][t] is the position of i within
+// neighbors[neighbors[i][t].0], so the reverse message M_{j->i} is msg[j][rev[i][t]].
+fn bp_reverse_index(model: &IsingModel) -> Vec<Vec<usize>> {
+    (0..model.num_spins)
+        .map(|i| {
+            model.neighbors[i]
+                .iter()
+                .map(|&(j, _)| model.neighbors[j].iter().position(|&(k, _)| k == i).unwrap())
+                .collect()
+        })
+        .collect()
+}
+
+// Full incoming field at i: B_i = -beta h_i + sum_{k in d(i)} M_{k->i}.
+fn bp_full_field(model: &IsingModel, beta: f64, msg: &[Vec<f64>], rev: &[Vec<usize>], i: usize) -> f64 {
+    let mut b = -beta * model.h[i];
+    for t in 0..model.neighbors[i].len() {
+        b += msg[model.neighbors[i][t].0][rev[i][t]];
+    }
+    b
+}
+
+// Run sum-product BP to a fixed point. Returns (messages, rev, converged, iters).
+fn run_bp(
+    model: &IsingModel,
+    beta: f64,
+    max_iters: usize,
+    damping: f64,
+    tol: f64,
+) -> (Vec<Vec<f64>>, Vec<Vec<usize>>, bool, usize) {
+    let n = model.num_spins;
+    let mut msg: Vec<Vec<f64>> = model.neighbors.iter().map(|nb| vec![0.0; nb.len()]).collect();
+    let rev = bp_reverse_index(model);
+
+    let mut converged = false;
+    let mut iters = 0;
+    for it in 0..max_iters {
+        iters = it + 1;
+        let mut max_diff = 0.0_f64;
+        let mut new_msg = msg.clone();
+        for i in 0..n {
+            let b = bp_full_field(model, beta, &msg, &rev, i);
+            for t in 0..model.neighbors[i].len() {
+                let (j, w) = model.neighbors[i][t];
+                let a = b - msg[j][rev[i][t]]; // cavity field excluding j
+                let computed = 0.5 * ((a - beta * w).cosh().ln() - (a + beta * w).cosh().ln());
+                let updated = damping * msg[i][t] + (1.0 - damping) * computed;
+                max_diff = max_diff.max((updated - msg[i][t]).abs());
+                new_msg[i][t] = updated;
+            }
+        }
+        msg = new_msg;
+        if max_diff < tol {
+            converged = true;
+            break;
+        }
+    }
+    (msg, rev, converged, iters)
+}
+
+// Bethe free energy from a BP fixed point:
+//   -beta F = sum_i (1 - d_i) ln Z_i + sum_{(ij)} ln Z_ij,
+// node term Z_i = 2 cosh(B_i), edge term over the two-spin cavity marginal.
+fn bp_bethe_free_energy(model: &IsingModel, beta: f64, msg: &[Vec<f64>], rev: &[Vec<usize>]) -> f64 {
+    let n = model.num_spins;
+    let mut neg_beta_f = 0.0;
+    for i in 0..n {
+        let d_i = model.neighbors[i].len() as f64;
+        neg_beta_f += (1.0 - d_i) * (2.0 * bp_full_field(model, beta, msg, rev, i).cosh()).ln();
+    }
+    for i in 0..n {
+        let b_i = bp_full_field(model, beta, msg, rev, i);
+        for t in 0..model.neighbors[i].len() {
+            let (j, w) = model.neighbors[i][t];
+            if j < i {
+                continue;
+            }
+            let a_i = b_i - msg[j][rev[i][t]];
+            let a_j = bp_full_field(model, beta, msg, rev, j) - msg[i][t];
+            let mut z_ij = 0.0;
+            for &si in &[1.0f64, -1.0] {
+                for &sj in &[1.0f64, -1.0] {
+                    z_ij += (-beta * w * si * sj + a_i * si + a_j * sj).exp();
+                }
+            }
+            neg_beta_f += z_ij.ln();
+        }
+    }
+    -neg_beta_f / beta
+}
+
 #[pyfunction]
 #[pyo3(signature = (model, beta, max_iters=1000, damping=0.5, tol=1e-8))]
 fn belief_propagation(
@@ -950,87 +1041,69 @@ fn belief_propagation(
     if !(0.0..1.0).contains(&damping) {
         return Err(PyValueError::new_err("damping must be in [0, 1)"));
     }
-    let n = model.num_spins;
-
-    // msg[i][t] is the message M_{i -> neighbors[i][t].0}.
-    let mut msg: Vec<Vec<f64>> = model.neighbors.iter().map(|nb| vec![0.0; nb.len()]).collect();
-    // rev[i][t] = index of i within neighbors[neighbors[i][t].0], so that the
-    // reverse message M_{j->i} is msg[j][rev[i][t]].
-    let rev: Vec<Vec<usize>> = (0..n)
-        .map(|i| {
-            model.neighbors[i]
-                .iter()
-                .map(|&(j, _)| model.neighbors[j].iter().position(|&(k, _)| k == i).unwrap())
-                .collect()
-        })
+    let (msg, rev, converged, iters) = run_bp(model, beta, max_iters, damping, tol);
+    let marginals: Vec<f64> = (0..model.num_spins)
+        .map(|i| bp_full_field(model, beta, &msg, &rev, i).tanh())
         .collect();
+    let free_energy = bp_bethe_free_energy(model, beta, &msg, &rev);
+    Ok((marginals, free_energy, converged, iters))
+}
 
-    // Full incoming field at i: B_i = -beta h_i + sum_{k in d(i)} M_{k->i}.
-    let full_field = |msg: &[Vec<f64>], i: usize| -> f64 {
-        let mut b = -beta * model.h[i];
-        for t in 0..model.neighbors[i].len() {
-            let k = model.neighbors[i][t].0;
-            b += msg[k][rev[i][t]];
-        }
-        b
-    };
+// (marginals, edge_i, edge_j, chi, bethe_free_energy, converged, iters)
+type BpCorrelations = (Vec<f64>, Vec<usize>, Vec<usize>, Vec<f64>, f64, bool, usize);
 
-    let mut converged = false;
-    let mut iters = 0;
-    for it in 0..max_iters {
-        iters = it + 1;
-        let mut max_diff = 0.0_f64;
-        let mut new_msg = msg.clone();
-        for i in 0..n {
-            let b = full_field(&msg, i);
-            for t in 0..model.neighbors[i].len() {
-                let (j, w) = model.neighbors[i][t];
-                let a = b - msg[j][rev[i][t]]; // cavity field excluding j
-                let computed =
-                    0.5 * ((a - beta * w).cosh().ln() - (a + beta * w).cosh().ln());
-                let updated = damping * msg[i][t] + (1.0 - damping) * computed;
-                max_diff = max_diff.max((updated - msg[i][t]).abs());
-                new_msg[i][t] = updated;
-            }
-        }
-        msg = new_msg;
-        if max_diff < tol {
-            converged = true;
-            break;
-        }
+/// BP fixed point plus per-edge connected correlations, for the Chertkov-Chernyak
+/// loop correction. Returns
+///   (marginals, edge_i, edge_j, chi, bethe_free_energy, converged, iters)
+/// where chi[e] = <s_i s_j>_BP - <s_i>_BP <s_j>_BP for edge (edge_i[e], edge_j[e]).
+#[pyfunction]
+#[pyo3(signature = (model, beta, max_iters=1000, damping=0.5, tol=1e-8))]
+fn bp_correlations(
+    model: &IsingModel,
+    beta: f64,
+    max_iters: usize,
+    damping: f64,
+    tol: f64,
+) -> PyResult<BpCorrelations> {
+    if !(beta > 0.0) {
+        return Err(PyValueError::new_err("beta must be > 0"));
     }
-
-    // Marginal magnetizations m_i = <s_i> = tanh(B_i).
-    let marginals: Vec<f64> = (0..n).map(|i| full_field(&msg, i).tanh()).collect();
-
-    // Bethe free energy:  -beta F = sum_i (1 - d_i) ln Z_i + sum_{(ij)} ln Z_ij,
-    // with node term Z_i = 2 cosh(B_i) and edge term over the two-spin cavity
-    // marginal. Exact on a tree.
-    let mut neg_beta_f = 0.0;
-    for i in 0..n {
-        let d_i = model.neighbors[i].len() as f64;
-        neg_beta_f += (1.0 - d_i) * (2.0 * full_field(&msg, i).cosh()).ln();
+    if !(0.0..1.0).contains(&damping) {
+        return Err(PyValueError::new_err("damping must be in [0, 1)"));
     }
+    let n = model.num_spins;
+    let (msg, rev, converged, iters) = run_bp(model, beta, max_iters, damping, tol);
+    let marginals: Vec<f64> = (0..n).map(|i| bp_full_field(model, beta, &msg, &rev, i).tanh()).collect();
+
+    let mut edge_i = Vec::new();
+    let mut edge_j = Vec::new();
+    let mut chi = Vec::new();
     for i in 0..n {
-        let b_i = full_field(&msg, i);
+        let b_i = bp_full_field(model, beta, &msg, &rev, i);
         for t in 0..model.neighbors[i].len() {
             let (j, w) = model.neighbors[i][t];
             if j < i {
-                continue; // count each edge once
+                continue;
             }
-            let a_i = b_i - msg[j][rev[i][t]]; // cavity on i excluding j
-            let a_j = full_field(&msg, j) - msg[i][t]; // cavity on j excluding i
-            let mut z_ij = 0.0;
-            for &si in &[1.0f64, -1.0] {
-                for &sj in &[1.0f64, -1.0] {
-                    z_ij += (-beta * w * si * sj + a_i * si + a_j * sj).exp();
+            let a_i = b_i - msg[j][rev[i][t]];
+            let a_j = bp_full_field(model, beta, &msg, &rev, j) - msg[i][t];
+            let (mut z, mut sij, mut si, mut sj) = (0.0, 0.0, 0.0, 0.0);
+            for &a in &[1.0f64, -1.0] {
+                for &b in &[1.0f64, -1.0] {
+                    let wt = (-beta * w * a * b + a_i * a + a_j * b).exp();
+                    z += wt;
+                    sij += wt * a * b;
+                    si += wt * a;
+                    sj += wt * b;
                 }
             }
-            neg_beta_f += z_ij.ln();
+            edge_i.push(i);
+            edge_j.push(j);
+            chi.push(sij / z - (si / z) * (sj / z));
         }
     }
-
-    Ok((marginals, -neg_beta_f / beta, converged, iters))
+    let free_energy = bp_bethe_free_energy(model, beta, &msg, &rev);
+    Ok((marginals, edge_i, edge_j, chi, free_energy, converged, iters))
 }
 
 fn bits_to_state(bits: u64, n: usize) -> Vec<i64> {
@@ -1077,6 +1150,7 @@ fn _kernel(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parallel_tempering_houdayer, m)?)?;
     m.add_function(wrap_pyfunction!(population_annealing, m)?)?;
     m.add_function(wrap_pyfunction!(belief_propagation, m)?)?;
+    m.add_function(wrap_pyfunction!(bp_correlations, m)?)?;
     m.add_function(wrap_pyfunction!(brute_force_min_energy, m)?)?;
     m.add_function(wrap_pyfunction!(brute_force_ground_state, m)?)?;
     Ok(())
