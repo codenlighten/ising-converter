@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from ising_lab.benchmarks import ea_instance, ea_suite
+from ising_lab.benchmarks import degree5_2d_instance, ea_instance, ea_suite
 
 
 def test_ea_3d_periodic_has_3N_couplings():
@@ -62,3 +62,39 @@ def test_ea_binary_coupling_values():
     inst = ea_instance(4, seed=0, dimension=3, distribution="binary")
     for _, _, w in inst.model.couplings():
         assert w in (-1.0, 1.0)
+
+
+def test_degree5_2d_is_exactly_5_regular():
+    """The 2D degree-5 proxy must be a clean 5-regular graph: every node degree 5,
+    exactly 5N/2 edges."""
+    for L in (4, 6, 8, 10):
+        inst = degree5_2d_instance(L, seed=1, distribution="gaussian")
+        assert inst.n == L * L
+        deg = {}
+        for i, j, _ in inst.model.couplings():
+            deg[i] = deg.get(i, 0) + 1
+            deg[j] = deg.get(j, 0) + 1
+        assert len(deg) == inst.n
+        assert set(deg.values()) == {5}
+        assert len(inst.model.couplings()) == 5 * inst.n // 2
+
+
+def test_degree5_2d_high_precision_couplings_distinct():
+    """Gaussian (high-precision) couplings should be continuous / distinct."""
+    inst = degree5_2d_instance(6, seed=2, distribution="gaussian")
+    ws = [w for _, _, w in inst.model.couplings()]
+    assert len(set(ws)) == len(ws)
+    assert inst.distribution == "deg5-2d-gaussian-L6"
+
+
+def test_degree5_2d_validates_L():
+    with pytest.raises(ValueError):
+        degree5_2d_instance(3, seed=0)  # odd
+    with pytest.raises(ValueError):
+        degree5_2d_instance(2, seed=0)  # too small
+
+
+def test_degree5_2d_reproducible():
+    a = degree5_2d_instance(6, seed=42)
+    b = degree5_2d_instance(6, seed=42)
+    assert a.model.couplings() == b.model.couplings()

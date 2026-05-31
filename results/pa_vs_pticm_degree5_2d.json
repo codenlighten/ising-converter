@@ -1,0 +1,43 @@
+{
+  "experiment": "pa_vs_pticm_degree5_2d",
+  "instance_class": "5-regular 2D toroidal lattice, Gaussian couplings (proxy for D-Wave 2D degree-5 high-precision; NOT the exact QAC graph)",
+  "metric": "optimal work-to-solution (MC sweep units), median over instances",
+  "ground_truth": "heavy-PA floor",
+  "instances_per_size": 4,
+  "reads": 60,
+  "rows": [
+    {
+      "L": 8,
+      "n": 64,
+      "pa_optimal_tts": 5474.281708322389,
+      "pticm_optimal_tts": 201184.03042558103,
+      "pticm_unreached_fraction": 0.0,
+      "ratio_pticm_over_pa": 36.75076314025398
+    },
+    {
+      "L": 10,
+      "n": 100,
+      "pa_optimal_tts": 21342.41048637654,
+      "pticm_optimal_tts": 5142974.702827142,
+      "pticm_unreached_fraction": 0.0,
+      "ratio_pticm_over_pa": 240.97440662150356
+    },
+    {
+      "L": 12,
+      "n": 144,
+      "pa_optimal_tts": 113070.84383954282,
+      "pticm_optimal_tts": null,
+      "pticm_unreached_fraction": 0.5,
+      "ratio_pticm_over_pa": null
+    },
+    {
+      "L": 14,
+      "n": 196,
+      "pa_optimal_tts": 540844.2603847585,
+      "pticm_optimal_tts": null,
+      "pticm_unreached_fraction": 1.0,
+      "ratio_pticm_over_pa": null
+    }
+  ],
+  "caveat": "PT-ICM uses fixed hyperparameters (16 replicas, beta 0.05-6.0) scanned over sweeps; a per-instance-tuned PT-ICM (as in the D-Wave benchmark) could do better. The PA-vs-PT-ICM comparison is apples-to-apples within this fixed-hyperparameter framework."
+}

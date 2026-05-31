@@ -544,6 +544,60 @@ def ea_suite(
     return out
 
 
+def degree5_2d_instance(
+    L: int,
+    seed: int,
+    distribution: str = "gaussian",
+) -> SKInstance:
+    """A 5-regular 2D toroidal spin glass -- a *proxy* for the 2D degree-5
+    high-precision instance class on which D-Wave's strongest optimization
+    scaling-advantage claim is benchmarked (Munoz Bauza & Lidar, PRL 134,
+    160601, 2025). This is NOT their exact QAC graph; it matches the salient
+    features: a planar/2D-local lattice of fixed degree 5 with continuous
+    ("high-precision") couplings.
+
+    Construction: an L x L square lattice with periodic boundaries (each site
+    has 4 nearest neighbors) plus one diagonal bond per site, added by the parity
+    rule "bond (x, y)-(x+1, y+1) iff x is even". Every site is the lower-left end
+    of exactly one such diagonal (even columns) or the upper-right end of exactly
+    one (odd columns), so the graph is exactly 5-regular. Requires L even, L >= 4.
+
+    `distribution`: "gaussian" (J ~ N(0, 1), high precision) or "binary".
+    """
+    if L < 4 or L % 2 != 0:
+        raise ValueError("L must be even and >= 4 for a clean 5-regular torus")
+    if distribution not in ("gaussian", "binary"):
+        raise ValueError(f"unknown distribution {distribution!r}")
+
+    rng = random.Random(seed)
+    n = L * L
+
+    def idx(x: int, y: int) -> int:
+        return (x % L) * L + (y % L)
+
+    edges_seen: set = set()
+    couplings: list = []
+
+    def add(i: int, j: int) -> None:
+        a, b = (i, j) if i < j else (j, i)
+        if a == b or (a, b) in edges_seen:
+            return
+        edges_seen.add((a, b))
+        w = rng.gauss(0.0, 1.0) if distribution == "gaussian" else (1.0 if rng.random() < 0.5 else -1.0)
+        couplings.append((a, b, w))
+
+    for x in range(L):
+        for y in range(L):
+            i = idx(x, y)
+            add(i, idx(x + 1, y))   # nearest neighbors
+            add(i, idx(x, y + 1))
+            if x % 2 == 0:          # one diagonal per site (parity rule -> degree 5)
+                add(i, idx(x + 1, y + 1))
+
+    model = IsingModel(n, [0.0] * n, couplings)
+    return SKInstance(n=n, seed=seed, distribution=f"deg5-2d-{distribution}-L{L}", model=model)
+
+
 def solve_ground_state(instance: SKInstance) -> tuple:
     """Brute-force the ground state, cache its energy, return (state, energy). N <= 30."""
     state, energy = brute_force_ground_state(instance.model)
@@ -946,6 +1000,7 @@ __all__ = [
     "sk_suite",
     "ea_instance",
     "ea_suite",
+    "degree5_2d_instance",
     "solve_ground_state",
     "BenchmarkRecord",
     "benchmark",

@@ -271,12 +271,14 @@ D-Wave's strongest published *optimization* scaling-advantage claim (Munoz Bauza
 & Lidar, *Phys. Rev. Lett.* 134, 160601, 2025) is measured **against PT-ICM** —
 parallel tempering with isoenergetic cluster moves, i.e. this lab's
 `parallel_tempering_houdayer`. We independently find that **population annealing
-beats PT-ICM by ~6× at N=64, ~1,800× at N=125, and unboundedly by N=216** on 3D
-EA (work-to-solution, `results/pa_vs_pticm_tts_ea3d.json`). That motivates a
-falsifiable hypothesis — a PA baseline could erode the reported QA advantage —
-but it is **not** a refutation: their instance class (2D degree-5, high-precision)
-and metric (wall-clock time-to-epsilon) differ from ours, and we have not run
-their benchmark. The precise claim, caveats, and a roadmap to an honest
+beats PT-ICM** by ~6× at N=64 and unboundedly by N=216 on 3D EA, and by ~37× at
+N=64 up to unbounded by N=144 on a **2D degree-5 high-precision proxy** of their
+own instance class (work-to-solution; `results/pa_vs_pticm_tts_ea3d.json`,
+`results/pa_vs_pticm_degree5_2d.json`). That motivates a falsifiable hypothesis —
+a PA baseline could erode the reported QA advantage — but it is **not** a
+refutation: our graph is a proxy (not D-Wave's exact QAC graph), our PT-ICM may be
+under-tuned, the metric differs (sweep units vs wall-clock time-to-epsilon), and
+beating PT-ICM is not beating QA. The precise claim, caveats, and a roadmap to an honest
 head-to-head are in [docs/DWAVE_COMPARISON.md](docs/DWAVE_COMPARISON.md).
 
 ## Development
