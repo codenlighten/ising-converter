@@ -8,6 +8,7 @@ from ._kernel import (
     parallel_tempering_diagnostic,
     parallel_tempering_houdayer,
     population_annealing,
+    population_annealing_icm,
     simulated_anneal,
 )
 from .qubo import QUBO, qubo_to_ising
@@ -22,6 +23,7 @@ __all__ = [
     "parallel_tempering_diagnostic",
     "parallel_tempering_houdayer",
     "population_annealing",
+    "population_annealing_icm",
     "belief_propagation",
     "bp_marginals",
     "bp_ground_state",

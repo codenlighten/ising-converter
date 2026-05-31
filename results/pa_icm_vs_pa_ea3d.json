@@ -1,0 +1,78 @@
+{
+  "experiment": "pa_icm_vs_pa_ea3d",
+  "lattice": "3d-gaussian-L8",
+  "n": 512,
+  "num_reads": 16,
+  "config": {
+    "num_temps": 50,
+    "population": 40,
+    "num_sweeps": 8,
+    "icm_every": 1
+  },
+  "rows": [
+    {
+      "instance_seed": 500,
+      "n": 512,
+      "pa_best": -841.5069845758524,
+      "pa_mean": -837.981516814124,
+      "pa_wall": 0.4450797739555128,
+      "icm_best": -842.0349395952508,
+      "icm_mean": -839.0749552774986,
+      "icm_wall": 0.4290625409921631,
+      "best_delta_icm_minus_pa": -0.5279550193984051,
+      "mean_delta_icm_minus_pa": -1.0934384633745822
+    },
+    {
+      "instance_seed": 501,
+      "n": 512,
+      "pa_best": -875.3369873461186,
+      "pa_mean": -872.0113413527342,
+      "pa_wall": 0.39679371600504965,
+      "icm_best": -877.4938724839751,
+      "icm_mean": -872.5285635156778,
+      "icm_wall": 0.4428232870413922,
+      "best_delta_icm_minus_pa": -2.156885137856534,
+      "mean_delta_icm_minus_pa": -0.5172221629435398
+    },
+    {
+      "instance_seed": 502,
+      "n": 512,
+      "pa_best": -893.5987353701689,
+      "pa_mean": -888.2875893051424,
+      "pa_wall": 0.4043827499845065,
+      "icm_best": -895.4662186156461,
+      "icm_mean": -890.8597508384457,
+      "icm_wall": 0.43871363200014457,
+      "best_delta_icm_minus_pa": -1.8674832454771604,
+      "mean_delta_icm_minus_pa": -2.5721615333033014
+    },
+    {
+      "instance_seed": 503,
+      "n": 512,
+      "pa_best": -870.2206913880756,
+      "pa_mean": -864.2743430336703,
+      "pa_wall": 0.4017518170294352,
+      "icm_best": -870.2206913880756,
+      "icm_mean": -868.1539251780495,
+      "icm_wall": 0.4452119130291976,
+      "best_delta_icm_minus_pa": 0.0,
+      "mean_delta_icm_minus_pa": -3.8795821443791283
+    },
+    {
+      "instance_seed": 504,
+      "n": 512,
+      "pa_best": -855.498199555731,
+      "pa_mean": -851.7609527565611,
+      "pa_wall": 0.3967336689820513,
+      "icm_best": -854.7840179990428,
+      "icm_mean": -850.8007387921103,
+      "icm_wall": 0.43990947102429345,
+      "best_delta_icm_minus_pa": 0.7141815566882315,
+      "mean_delta_icm_minus_pa": 0.9602139644507588
+    }
+  ],
+  "mean_best_delta": -0.7676283692087736,
+  "mean_mean_delta": -1.4204380679099586,
+  "icm_better_best_count": 3,
+  "icm_better_mean_count": 4
+}

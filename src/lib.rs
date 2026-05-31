@@ -785,11 +785,24 @@ fn parallel_tempering_houdayer(
 // basins, which makes PA strong on rough spin-glass landscapes.
 // (Hukushima-Iba 2003; Machta 2010; Wang-Machta-Katzgraber 2015.)
 
+// Two distinct mutable elements of a slice (a != b), for pairwise cluster moves.
+fn two_mut<T>(v: &mut [T], a: usize, b: usize) -> (&mut T, &mut T) {
+    debug_assert!(a != b);
+    if a < b {
+        let (lo, hi) = v.split_at_mut(b);
+        (&mut lo[a], &mut hi[0])
+    } else {
+        let (lo, hi) = v.split_at_mut(a);
+        (&mut hi[0], &mut lo[b])
+    }
+}
+
 fn pa_one(
     model: &IsingModel,
     betas: &[f64],
     population: usize,
     sweeps_per_temp: usize,
+    icm_every: usize,
     rng: &mut SmallRng,
 ) -> (Vec<i64>, f64) {
     let n = model.num_spins;
@@ -854,6 +867,33 @@ fn pa_one(
                 best_state.copy_from_slice(&pop[k]);
             }
         }
+
+        // Optional Houdayer isoenergetic cluster moves between random pairs of
+        // the population (all at the same temperature betas[t]). Decorrelates
+        // the population on sparse/finite-dimensional graphs; a no-op on fully
+        // connected SK. (Wang-Machta-Katzgraber 2015.)
+        if icm_every > 0 && t % icm_every == 0 && pop.len() >= 2 {
+            let mut idx: Vec<usize> = (0..pop.len()).collect();
+            for k in (1..idx.len()).rev() {
+                idx.swap(k, rng.gen_range(0..=k)); // Fisher-Yates shuffle
+            }
+            let mut p = 0;
+            while p + 1 < idx.len() {
+                let (a, b) = (idx[p], idx[p + 1]);
+                let (sa, sb) = two_mut(&mut pop, a, b);
+                let (ea, eb) = two_mut(&mut energy, a, b);
+                houdayer_cluster_move(model, sa, sb, ea, eb, betas[t], rng);
+                if *ea < best_energy {
+                    best_energy = *ea;
+                    best_state.copy_from_slice(sa);
+                }
+                if *eb < best_energy {
+                    best_energy = *eb;
+                    best_state.copy_from_slice(sb);
+                }
+                p += 2;
+            }
+        }
     }
 
     let best_energy = compute_energy(model, &best_state);
@@ -913,7 +953,71 @@ fn population_annealing(
             .into_par_iter()
             .map(|s| {
                 let mut rng = SmallRng::seed_from_u64(s);
-                pa_one(&model, &betas, population, num_sweeps, &mut rng)
+                pa_one(&model, &betas, population, num_sweeps, 0, &mut rng)
+            })
+            .collect()
+    });
+    Ok(results)
+}
+
+#[pyfunction]
+#[pyo3(signature = (
+    model,
+    num_temps=30,
+    population=50,
+    num_sweeps=10,
+    beta_min=0.1,
+    beta_max=10.0,
+    icm_every=1,
+    num_reads=1,
+    seed=None,
+))]
+#[allow(clippy::too_many_arguments)]
+fn population_annealing_icm(
+    py: Python<'_>,
+    model: &IsingModel,
+    num_temps: usize,
+    population: usize,
+    num_sweeps: usize,
+    beta_min: f64,
+    beta_max: f64,
+    icm_every: usize,
+    num_reads: usize,
+    seed: Option<u64>,
+) -> PyResult<Vec<(Vec<i64>, f64)>> {
+    if num_temps < 2 {
+        return Err(PyValueError::new_err("num_temps must be >= 2"));
+    }
+    if population < 2 {
+        return Err(PyValueError::new_err("population must be >= 2 for cluster moves"));
+    }
+    if !(beta_min > 0.0) || !(beta_max > beta_min) {
+        return Err(PyValueError::new_err("require 0 < beta_min < beta_max"));
+    }
+    if icm_every == 0 {
+        return Err(PyValueError::new_err("icm_every must be >= 1"));
+    }
+
+    let log_lo = beta_min.ln();
+    let log_hi = beta_max.ln();
+    let denom = (num_temps - 1) as f64;
+    let betas: Vec<f64> = (0..num_temps)
+        .map(|k| (log_lo + (log_hi - log_lo) * (k as f64 / denom)).exp())
+        .collect();
+
+    let mut master = match seed {
+        Some(s) => SmallRng::seed_from_u64(s),
+        None => SmallRng::from_entropy(),
+    };
+    let chain_seeds: Vec<u64> = (0..num_reads).map(|_| master.gen()).collect();
+    let model = model.clone();
+
+    let results = py.allow_threads(|| {
+        chain_seeds
+            .into_par_iter()
+            .map(|s| {
+                let mut rng = SmallRng::seed_from_u64(s);
+                pa_one(&model, &betas, population, num_sweeps, icm_every, &mut rng)
             })
             .collect()
     });
@@ -1149,6 +1253,7 @@ fn _kernel(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parallel_tempering_with_betas, m)?)?;
     m.add_function(wrap_pyfunction!(parallel_tempering_houdayer, m)?)?;
     m.add_function(wrap_pyfunction!(population_annealing, m)?)?;
+    m.add_function(wrap_pyfunction!(population_annealing_icm, m)?)?;
     m.add_function(wrap_pyfunction!(belief_propagation, m)?)?;
     m.add_function(wrap_pyfunction!(bp_correlations, m)?)?;
     m.add_function(wrap_pyfunction!(brute_force_min_energy, m)?)?;

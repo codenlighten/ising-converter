@@ -23,6 +23,7 @@ and the QUBO form is the binary (`x_i in {0, 1}`) equivalent, related by
   - `parallel_tempering` / `parallel_tempering_diagnostic` / `parallel_tempering_with_betas`
   - `parallel_tempering_houdayer` — PT with Houdayer isoenergetic cluster moves
   - `population_annealing` — sequential Monte Carlo with Boltzmann resampling
+  - `population_annealing_icm` — PA + Houdayer cluster moves (strongest on 3D EA)
   - `belief_propagation` — deterministic sum-product inference (marginals, Bethe free energy)
   - `brute_force_ground_state` / `brute_force_min_energy` (exact, N ≤ 30)
   - Deterministic for a fixed `seed`, regardless of thread scheduling.
@@ -140,6 +141,14 @@ Two physics-aware tools for the hard spin-glass regime (`scripts/bench_houdayer.
   energies ~28 units lower than parallel tempering **even when PT is given 16×
   the sweeps** (~50× the wall time), winning on 5/5 benchmark instances
   (`results/population_vs_pt_ea3d.json`).
+
+- **Population annealing + cluster moves** (`population_annealing_icm`) is the
+  Wang–Machta–Katzgraber combination — Houdayer isoenergetic cluster moves
+  between random pairs of the PA population at each temperature, the literature's
+  strongest classical method for 3D EA glasses. Honest finding: it improves on
+  plain PA but *incrementally* (~1–1.4 energy units typical at L=8, better on
+  4/5 instances at matched compute — `results/pa_icm_vs_pa_ea3d.json`), because
+  PA's resampling already does most of the work. A no-op on fully connected SK.
 
 - **Belief propagation** (`belief_propagation`, `ising_lab.inference`) is a
   deterministic message-passing alternative to Monte Carlo. It returns spin

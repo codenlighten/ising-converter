@@ -33,6 +33,7 @@ from ._kernel import (
     parallel_tempering_houdayer,
     parallel_tempering_with_betas,
     population_annealing,
+    population_annealing_icm,
     simulated_anneal,
 )
 from .registry import OptimumRegistry, sk_instance_key
@@ -799,6 +800,41 @@ def wrap_pa(
     return _run
 
 
+def wrap_pa_icm(
+    num_temps: int = 30,
+    population: int = 50,
+    num_sweeps: int = 10,
+    beta_min: float = 0.1,
+    beta_max: float = 10.0,
+    icm_every: int = 1,
+    seed: Optional[int] = None,
+) -> SamplerFn:
+    """Build a sampler for population annealing with Houdayer cluster moves.
+
+    Applies isoenergetic cluster moves between random pairs of the population
+    (all at one temperature per step) -- the Wang-Machta-Katzgraber combination,
+    the strongest classical method for 3D Edwards-Anderson glasses. The gain
+    over plain PA is incremental (PA's resampling already does most of the work)
+    and shows mainly on sparse lattices; on fully connected SK the cluster moves
+    are a no-op, so prefer `wrap_pa` there.
+    """
+
+    def _run(model: IsingModel, num_reads: int) -> List[tuple]:
+        return population_annealing_icm(
+            model,
+            num_temps=num_temps,
+            population=population,
+            num_sweeps=num_sweeps,
+            beta_min=beta_min,
+            beta_max=beta_max,
+            icm_every=icm_every,
+            num_reads=num_reads,
+            seed=seed,
+        )
+
+    return _run
+
+
 def records_to_csv(
     records: Iterable["BenchmarkRecord"],
     path: PathLike,
@@ -918,6 +954,7 @@ __all__ = [
     "wrap_pt_tuned",
     "wrap_pt_houdayer",
     "wrap_pa",
+    "wrap_pa_icm",
     "wrap_dimod",
     "sk_energy_density",
     "sk_parisi_reference_energy",

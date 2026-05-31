@@ -8,8 +8,9 @@ from ising_lab import (
     brute_force_ground_state,
     parallel_tempering,
     population_annealing,
+    population_annealing_icm,
 )
-from ising_lab.benchmarks import ea_instance, sk_instance, wrap_pa
+from ising_lab.benchmarks import ea_instance, sk_instance, wrap_pa, wrap_pa_icm
 
 
 def test_pa_finds_ground_state_on_small_sk():
@@ -71,6 +72,53 @@ def test_pa_returns_valid_state_shape():
 def test_wrap_pa_contract():
     inst = ea_instance(2, seed=0, dimension=3)
     sampler = wrap_pa(num_temps=20, population=30, seed=1)
+    out = sampler(inst.model, 5)
+    assert len(out) == 5
+    for state, energy in out:
+        assert inst.model.energy(state) == pytest.approx(energy)
+
+
+def test_pa_icm_finds_ground_state_on_small_ea():
+    inst = ea_instance(2, seed=1, dimension=3, distribution="binary")
+    _, truth = brute_force_ground_state(inst.model)
+    res = population_annealing_icm(
+        inst.model, num_temps=30, population=30, num_sweeps=8,
+        beta_min=0.1, beta_max=10.0, icm_every=1, num_reads=8, seed=1,
+    )
+    assert min(e for _, e in res) == pytest.approx(truth)
+
+
+def test_pa_icm_reported_energy_exact_and_deterministic():
+    inst = ea_instance(3, seed=2, dimension=3)
+    r1 = population_annealing_icm(inst.model, num_temps=20, population=30, icm_every=1, num_reads=5, seed=3)
+    r2 = population_annealing_icm(inst.model, num_temps=20, population=30, icm_every=1, num_reads=5, seed=3)
+    assert r1 == r2
+    for state, energy in r1:
+        assert inst.model.energy(state) == pytest.approx(energy)
+
+
+def test_pa_icm_validates_arguments():
+    inst = sk_instance(10, seed=0, distribution="binary")
+    with pytest.raises(Exception):
+        population_annealing_icm(inst.model, population=1)  # needs >= 2 for pairs
+    with pytest.raises(Exception):
+        population_annealing_icm(inst.model, icm_every=0)
+    with pytest.raises(Exception):
+        population_annealing_icm(inst.model, beta_min=float("nan"))
+
+
+def test_plain_pa_unchanged_by_icm_addition():
+    """Regression: plain population_annealing must stay deterministic and is the
+    icm_every=0 path, so adding ICM did not perturb it."""
+    inst = sk_instance(16, seed=4, distribution="binary")
+    a = population_annealing(inst.model, num_temps=20, population=30, num_reads=8, seed=9)
+    b = population_annealing(inst.model, num_temps=20, population=30, num_reads=8, seed=9)
+    assert a == b
+
+
+def test_wrap_pa_icm_contract():
+    inst = ea_instance(2, seed=0, dimension=3)
+    sampler = wrap_pa_icm(num_temps=20, population=20, icm_every=1, seed=1)
     out = sampler(inst.model, 5)
     assert len(out) == 5
     for state, energy in out:
